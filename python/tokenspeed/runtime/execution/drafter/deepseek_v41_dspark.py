@@ -224,7 +224,15 @@ class DeepseekV41DSpark(BaseDrafter):
         # it; decode rows overwrite the proposal columns below), and each
         # decode request's anchor is its last accepted verify position.
         next_tokens = self.next_tokens_buf[: base_ctx.bs]
+        if rows == 0:
+            return next_tokens
+
         start_pos = self.start_pos_buf[:num_decodes]
+        num_prefill_outputs = (
+            num_extends
+            if base_ctx.output_layout is None
+            else base_ctx.output_layout.num_prefill_outputs
+        )
         dsv41.dspark_anchors(
             output_tokens,
             accept_lengths,
@@ -233,6 +241,7 @@ class DeepseekV41DSpark(BaseDrafter):
             self.spec_num_tokens,
             next_tokens,
             start_pos,
+            num_prefill_outputs=num_prefill_outputs,
         )
 
         # Every captured row writes its window row: a prompt's kept tail seeds
@@ -246,7 +255,8 @@ class DeepseekV41DSpark(BaseDrafter):
             pool,
         )
         self._draft_decode_rows(base_ctx, start_pos, next_tokens)
-        next_tokens.clamp_(0, int(self.vocab_size) - 1)
+        next_tokens[:num_prefill_outputs].clamp_(0, int(self.vocab_size) - 1)
+        next_tokens[num_extends:].clamp_(0, int(self.vocab_size) - 1)
         return next_tokens
 
     def draft(self, *args, **kwargs) -> torch.Tensor | None:

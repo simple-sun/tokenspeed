@@ -24,6 +24,8 @@ from types import SimpleNamespace
 import pytest
 import torch
 
+from tokenspeed.runtime.execution.context import ForwardContext
+from tokenspeed.runtime.execution.forward_batch_info import ForwardMode
 from tokenspeed.runtime.execution.model_executor import ModelExecutor
 
 
@@ -149,7 +151,14 @@ def test_draft_final_step_follows_the_complete_drafter_run():
     executor._draft_final_step_counter = SimpleNamespace(
         record_cache=lambda: events.append("draft-final")
     )
-    ctx = SimpleNamespace(bs=1, num_extends=1, input_num_tokens=1)
+    ctx = ForwardContext(
+        attn_backend=None,
+        token_to_kv_pool=None,
+        bs=1,
+        num_extends=1,
+        input_num_tokens=1,
+        forward_mode=ForwardMode.EXTEND,
+    )
 
     executor._forward_step(bs=1, ctx=ctx, sampling_info=object())
 
@@ -232,7 +241,11 @@ def test_non_spec_decode_routes_through_verify():
 
     # Pure decode, bs=3, N=1: candidates are the tail 3 ids as [3, 1].
     ctx = SimpleNamespace(
-        bs=3, num_extends=0, input_num_tokens=3, decode_input_ids=None
+        bs=3,
+        num_extends=0,
+        input_num_tokens=3,
+        decode_input_ids=None,
+        output_layout=None,
     )
     candidates = executor._decode_candidates(ctx)
     assert candidates.shape == (3, 1)
@@ -244,7 +257,11 @@ def test_non_spec_decode_routes_through_verify():
     # Pure prefill still samples.
     calls.clear()
     ctx2 = SimpleNamespace(
-        bs=2, num_extends=2, input_num_tokens=6, decode_input_ids=None
+        bs=2,
+        num_extends=2,
+        input_num_tokens=6,
+        decode_input_ids=None,
+        output_layout=None,
     )
     assert executor._decode_candidates(ctx2) is None
     executor._run_sampling(object(), object(), ctx2, None)
